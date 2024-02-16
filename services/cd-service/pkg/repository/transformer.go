@@ -36,7 +36,6 @@ import (
 	"github.com/freiheit-com/kuberpult/pkg/grpc"
 	"github.com/freiheit-com/kuberpult/pkg/valid"
 
-	"github.com/DataDog/datadog-go/v5/statsd"
 	"github.com/freiheit-com/kuberpult/pkg/logger"
 	"k8s.io/utils/strings/slices"
 
@@ -135,6 +134,14 @@ func GaugeEnvAppLockMetric(fs billy.Filesystem, env, app string) {
 	}
 }
 
+func GaugeDeploymentMetric(env, app string) error {
+	if ddMetrics != nil {
+		err := ddMetrics.Gauge("deployment", 1, []string{"app:" + app, "env:" + env}, 1)
+		return err
+	}
+	return nil
+}
+
 func UpdateDatadogMetrics(state *State, changes *TransformerResult) error {
 	filesystem := state.Filesystem
 	if ddMetrics == nil {
@@ -153,30 +160,34 @@ func UpdateDatadogMetrics(state *State, changes *TransformerResult) error {
 			}
 		}
 	}
-	now := time.Now() // ensure all events have the same timestamp
+	//now := time.Now() // ensure all events have the same timestamp
 	if changes != nil && ddMetrics != nil {
 		for i := range changes.ChangedApps {
 			oneChange := changes.ChangedApps[i]
-			teamMessage := func() string {
-				if oneChange.Team != "" {
-					return fmt.Sprintf(" for team %s", oneChange.Team)
-				}
-				return ""
-			}()
-			event := statsd.Event{
-				Title:     "Kuberpult app deployed",
-				Text:      fmt.Sprintf("Kuberpult has deployed %s to %s%s", oneChange.App, oneChange.Env, teamMessage),
-				Timestamp: now,
-				Tags: []string{
-					"kuberpult.application:" + oneChange.App,
-					"kuberpult.environment:" + oneChange.Env,
-					"kuberpult.team:" + oneChange.Team,
-				},
-			}
-			err := ddMetrics.Event(&event)
+			err := GaugeDeploymentMetric(oneChange.Env, oneChange.App)
 			if err != nil {
 				return err
 			}
+			//teamMessage := func() string {
+			//	if oneChange.Team != "" {
+			//		return fmt.Sprintf(" for team %s", oneChange.Team)
+			//	}
+			//	return ""
+			//}()
+			//event := statsd.Event{
+			//	Title:     "Kuberpult app deployed",
+			//	Text:      fmt.Sprintf("Kuberpult has deployed %s to %s%s", oneChange.App, oneChange.Env, teamMessage),
+			//	Timestamp: now,
+			//	Tags: []string{
+			//		"kuberpult.application:" + oneChange.App,
+			//		"kuberpult.environment:" + oneChange.Env,
+			//		"kuberpult.team:" + oneChange.Team,
+			//	},
+			//}
+			//err := ddMetrics.Event(&event)
+			//if err != nil {
+			//	return err
+			//}
 		}
 	}
 	return nil
